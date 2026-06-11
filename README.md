@@ -25,6 +25,7 @@ Each tool is written with the following in mind:
 | Tool | Description |
 |------|-------------|
 | [`jek_cat`](#jek_cat) | Reads a file and writes its contents to stdout, handling partial writes and read errors |
+| [`jek_wc`](#jek_wc) | Counts the total number of bytes in a file and prints the result to stdout |
 
 ---
 
@@ -46,6 +47,26 @@ jekcat <file>
 | `read` | [read(2)](https://man7.org/linux/man-pages/man2/read.2.html) |
 | `write` | [write(2)](https://man7.org/linux/man-pages/man2/write.2.html) |
 | `close` | [close(2)](https://man7.org/linux/man-pages/man2/close.2.html) |
+
+---
+
+### jek_wc
+
+A reimplementation of [`wc(1)`](https://man7.org/linux/man-pages/man1/wc.1.html), currently supporting byte count.
+
+**Usage**
+
+```sh
+jekwc <file>
+```
+
+**Syscalls used**
+
+| Syscall | Man page |
+|---------|----------|
+| `open` | [open(2)](https://man7.org/linux/man-pages/man2/open.2.html) |
+| `read` | [read(2)](https://man7.org/linux/man-pages/man2/read.2.html) |
+| `write` | [write(2)](https://man7.org/linux/man-pages/man2/write.2.html) |
 
 ---
 

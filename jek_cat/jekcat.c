@@ -58,5 +58,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    return copy_fd_to_stdout(input_fd);
+    int write_result_status = copy_fd_to_stdout(input_fd);
+    if (write_result_status == 1) {
+        return 1;
+    }
+    write_result_status = write(STDOUT_FILENO, "\n", 1);
+    if (write_result_status == -1) {
+        perror("write");
+        return 1;
+    }
 }
