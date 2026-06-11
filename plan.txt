@@ -1,0 +1,42 @@
+jeksync roadmap
+================
+
+Goal: build a custom file tracking and syncing tool (jeksync).
+Each tool below teaches a skill that jeksync directly depends on.
+
+PHASE 1 - File I/O
+  jekwc   -- counting bytes/words/lines, multi-file handling
+  jekcp   -- write syscalls (O_WRONLY, O_CREAT, O_TRUNC), creating and overwriting files
+
+PHASE 2 - Filesystem
+  jekls   -- opendir/readdir, stat (file size, timestamps, permissions)
+  jekfind -- recursive directory traversal (core of any sync tool)
+
+PHASE 3 - Text processing
+  jekgrep -- line-by-line reading, POSIX regex (regcomp/regexec)
+
+PHASE 4 - Integrity
+  jeksum  -- hashing file contents with libsodium (how sync detects what changed)
+
+PHASE 5 - Diffing
+  jekdiff -- comparing file/directory states, delta detection
+
+PHASE 6 - Encryption
+  jekencrypt -- encrypt/decrypt files with libsodium, key generation, nonces
+               (only phase where you lean on a library rather than syscalls)
+
+PHASE 7 - Networking
+  jeksend -- client: socket(), connect(), send() a file to a server
+  jekrecv -- server: socket(), bind(), listen(), accept(), recv() and write to disk
+             essentially jekcp over a network
+             then layer jekencrypt on top to send encrypted files
+
+PHASE 8 - jeksync
+  combine everything:
+    - jekfind  to walk a directory tree
+    - jeksum   to hash files and detect what changed
+    - jekdiff  to compare local and remote state
+    - jekencrypt to encrypt before sending
+    - jeksend/jekrecv to transfer over the wire
+
+tools: 10 (excluding jeksync itself)

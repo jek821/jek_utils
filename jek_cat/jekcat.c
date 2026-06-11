@@ -47,7 +47,7 @@ int copy_fd_to_stdout(int input_fd) {
 
 int main(int argc, char *argv[]) {
     if (argc <= 1) {
-        fprintf(stderr, "usage: mycat <file>\n");
+        fprintf(stderr, "usage: jekcat <file>\n");
         return 1;
     }
 
