@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-       if (copy_fd_to_stdout(fd) == -1)
+       if (cat_result == -1)
     {
         return 1;
     }
