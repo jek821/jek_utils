@@ -31,7 +31,10 @@ uninstall:
 clean:
 	rm -f $(TARGET)
 
+test: $(TARGET)
+	bash test.sh
+
 # Tell make that these are task names, not files.
 # Without this, if a file named "install", "uninstall", or "clean" existed here,
 # make would think the task was already done and skip it.
-.PHONY: install uninstall clean
+.PHONY: install uninstall clean test
