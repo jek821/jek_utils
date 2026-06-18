@@ -25,7 +25,8 @@ Each tool is written with the following in mind:
 | Tool | Description |
 |------|-------------|
 | [`jek_cat`](#jek_cat) | Reads a file and writes its contents to stdout, handling partial writes and read errors |
-| [`jek_wc`](#jek_wc) | Counts the total number of bytes in a file and prints the result to stdout |
+| [`jek_wc`](#jek_wc) | Counts bytes, lines, and/or words in a file, selected by flags |
+| [`jek_ls`](#jek_ls) | Lists the contents of the current directory, with modification times and color for subdirectories |
 
 ---
 
@@ -52,13 +53,19 @@ jekcat <file>
 
 ### jek_wc
 
-A reimplementation of [`wc(1)`](https://man7.org/linux/man-pages/man1/wc.1.html), currently supporting byte count.
+A reimplementation of [`wc(1)`](https://man7.org/linux/man-pages/man1/wc.1.html). Flags control which counts are shown; any combination is valid.
 
 **Usage**
 
 ```sh
-jekwc <file>
+jekwc [-b] [-l] [-w] <file>
 ```
+
+| Flag | Effect |
+|------|--------|
+| `-b` | Print byte count |
+| `-l` | Print line count |
+| `-w` | Print word count |
 
 **Syscalls used**
 
@@ -66,7 +73,27 @@ jekwc <file>
 |---------|----------|
 | `open` | [open(2)](https://man7.org/linux/man-pages/man2/open.2.html) |
 | `read` | [read(2)](https://man7.org/linux/man-pages/man2/read.2.html) |
-| `write` | [write(2)](https://man7.org/linux/man-pages/man2/write.2.html) |
+| `close` | [close(2)](https://man7.org/linux/man-pages/man2/close.2.html) |
+
+---
+
+### jek_ls
+
+A reimplementation of [`ls(1)`](https://man7.org/linux/man-pages/man1/ls.1.html). Lists entries in the current directory, printing each entry's name and last modification time. Directory entries are highlighted in blue.
+
+**Usage**
+
+```sh
+jekls
+```
+
+**APIs used**
+
+| Function | Man page |
+|----------|----------|
+| `opendir` | [opendir(3)](https://man7.org/linux/man-pages/man3/opendir.3.html) |
+| `readdir` | [readdir(3)](https://man7.org/linux/man-pages/man3/readdir.3.html) |
+| `stat` | [stat(2)](https://man7.org/linux/man-pages/man2/stat.2.html) |
 
 ---
 
