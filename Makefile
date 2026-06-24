@@ -3,19 +3,19 @@ TOOLS = jek_cat jek_wc jek_ls
 
 # Default target — builds all tools without installing
 all:
-	for tool in $(TOOLS); do $(MAKE) -C $$tool; done
+	for tool in $(TOOLS); do $(MAKE) -C $$tool || exit 1; done
 
 # Installs all tools to ~/.local/bin
 install:
-	for tool in $(TOOLS); do $(MAKE) -C $$tool install; done
+	for tool in $(TOOLS); do $(MAKE) -C $$tool install || exit 1; done
 
 # Removes all tools from ~/.local/bin
 uninstall:
-	for tool in $(TOOLS); do $(MAKE) -C $$tool uninstall; done
+	for tool in $(TOOLS); do $(MAKE) -C $$tool uninstall || exit 1; done
 
 # Removes compiled binaries from all project folders
 clean:
-	for tool in $(TOOLS); do $(MAKE) -C $$tool clean; done
+	for tool in $(TOOLS); do $(MAKE) -C $$tool clean || exit 1; done
 
 # Runs each tool's test suite. Tools without a `test` target are skipped
 # (with a note) instead of aborting the whole run.

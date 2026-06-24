@@ -1,0 +1,52 @@
+REFACTOR PLAN: Bring jek_ls to jek_cat / jek_wc quality
+=========================================================
+
+Reference: jek_cat and jek_wc are the gold standard — strict CFLAGS
+(Docs/strict_compile.txt), clean POSIX syscalls, full error handling,
+a header file with prototypes, a test.sh suite, and a Makefile with a
+`test` target. jek_wc is already complete (jekwc.h + test.sh exist).
+
+
+─────────────────────────────────────────
+COMPLETED
+─────────────────────────────────────────
+  [x] Renamed jek_ls.c -> jekls.c (was misnamed; Makefile already expected jekls.c)
+  [x] jek_ls/Makefile: adopted strict CFLAGS, added test target
+  [x] jek_ls/jekls.h: created with fd_to_buff prototype
+  [x] jek_ls/test.sh: created (10 test cases)
+  [x] Root Makefile: added || exit 1 to all/install/uninstall/clean loops
+  [x] .gitignore: already correct — jek_*/jek* pattern covers all binaries
+
+
+─────────────────────────────────────────
+REMAINING: SOURCE FIXES (jek_ls/jekls.c)
+─────────────────────────────────────────
+  1.  #include "jekls.h" at the top (required by -Wmissing-prototypes)
+  2.  Remove unused <fcntl.h> include
+  3.  Keep #define _DEFAULT_SOURCE at top — needed alongside
+      -D_POSIX_C_SOURCE=200809L to expose DT_DIR (d_type) and st_mtim
+  4.  Fix memory leak: replace malloc(sizeof(struct stat)) with a
+      stack-allocated `struct stat buff;` and pass &buff to fd_to_buff()
+  5.  Check fd_to_buff() return value at the call site — currently ignored;
+      on failure, skip that entry instead of reading garbage from buff
+  6.  Remove debug mtime output: delete the localtime/strftime/
+      printf("Formatted time: ...") block, and the now-unused
+      `struct tm *local_time` and `char buffer[64]` declarations
+  7.  Skip "." and ".." entries by default (standard ls behavior)
+  8.  Add -a flag via getopt: without -a, skip entries where d_name[0] == '.'
+  9.  Accept optional path argument: if a non-flag arg is present,
+      opendir(argv[optind]); otherwise opendir(".")
+  10. Reset ANSI color after directory names: append \033[0m so subsequent
+      output isn't colored
+  11. Return 1 on any error (opendir failure, etc.), 0 on success
+
+
+─────────────────────────────────────────
+VERIFICATION
+─────────────────────────────────────────
+  make clean && make && make test   # all three tools build + tests pass
+
+  Manual spot-checks:
+    ./jek_ls/jekls /tmp     # lists /tmp
+    ./jek_ls/jekls          # lists current dir
+    ./jek_ls/jekls -a       # also shows dotfiles

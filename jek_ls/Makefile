@@ -1,8 +1,17 @@
 # Variables — defined once here, referenced below as $(NAME)
 # CC: the compiler to use
 CC      = gcc
-# CFLAGS: warning flags — catch common mistakes at compile time
-CFLAGS  = -Wall -Wextra
+# CFLAGS: strict compile-time checks (see Docs/strict_compile.txt).
+#   -std=c11 -Wpedantic       strict ISO C11, no silent extensions
+#   -D_POSIX_C_SOURCE=200809L exposes the POSIX API (open/read/getopt/...)
+#                             that strict ISO mode would otherwise hide
+#   -Wall -Wextra             the common + extra warning sets
+#   -Wshadow                  warn on shadowed variables
+#   -Wstrict-prototypes -Wmissing-prototypes   require real prototypes
+#   -Wconversion              warn on implicit type conversions
+#   -Werror                   treat every warning as a build failure
+CFLAGS  = -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic \
+          -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wconversion -Werror
 # TARGET: name of the output binary
 TARGET  = jekls
 # SRC: source file(s) to compile
@@ -31,7 +40,10 @@ uninstall:
 clean:
 	rm -f $(TARGET)
 
+test: $(TARGET)
+	bash test.sh
+
 # Tell make that these are task names, not files.
 # Without this, if a file named "install", "uninstall", or "clean" existed here,
 # make would think the task was already done and skip it.
-.PHONY: install uninstall clean
+.PHONY: install uninstall clean test
