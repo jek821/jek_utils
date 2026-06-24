@@ -17,6 +17,11 @@ uninstall:
 clean:
 	for tool in $(TOOLS); do $(MAKE) -C $$tool clean || exit 1; done
 
+# Formats every tool's C sources in place, repo-wide, per the root
+# .clang-format. Run after editing to keep style consistent across tools.
+format:
+	clang-format -i $(wildcard jek_*/*.[ch])
+
 # Runs each tool's test suite. Tools without a `test` target are skipped
 # (with a note) instead of aborting the whole run.
 test:
@@ -28,4 +33,4 @@ test:
 		fi; \
 	done
 
-.PHONY: all install uninstall clean test
+.PHONY: all install uninstall clean format test

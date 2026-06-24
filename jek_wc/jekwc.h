@@ -6,16 +6,16 @@
 
 // Which counts the user asked for (set from the command-line flags).
 typedef struct {
-  int show_bytes;
-  int show_words;
-  int show_lines;
+    int show_bytes;
+    int show_words;
+    int show_lines;
 } Flags;
 
 // Running totals accumulated across the file.
 typedef struct {
-  size_t byte_count;
-  long word_count;
-  long line_count;
+    size_t byte_count;
+    long word_count;
+    long line_count;
 } File_Data;
 
 void usage_error(void);
