@@ -1,5 +1,5 @@
 # List of all tools — add a new directory here when you add a new tool
-TOOLS = jek_cat jek_wc jek_ls
+TOOLS = jek_cat jek_wc #jek_ls
 
 # Default target — builds all tools without installing
 all:
