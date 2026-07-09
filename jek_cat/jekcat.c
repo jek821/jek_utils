@@ -2,7 +2,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
-
+    
 int write_all_bytes(const char *buffer, ssize_t num_bytes) {
     ssize_t total_bytes_written = 0;
     while (total_bytes_written < num_bytes) {
