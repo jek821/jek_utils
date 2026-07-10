@@ -26,7 +26,38 @@
 
 int handle_flags(int argc, char *argv[], Flags *flags) {
     int opt;
-    while ((opt = getopt(argc, argv, "n:c:t:")))
+    while ((opt = getopt(argc, argv, "n:c:t:"))) {
+        switch (opt) {
+        case 'n':
+            flags->name = 1;
+            flags->name_string = optarg;
+            break;
+        case 'c':
+            flags->contains = 1;
+            flags->contains_string = optarg;
+            break;
+        case 't':
+            if (optarg[0] == 'f') {
+                flags->file = 1;
+            } else if (optarg[0] == 'd') {
+                flags->directory = 1;
+            } else {
+                fprintf(stderr, "Invalid argument for --type: %s\n", optarg);
+                return -1;
+            }
+            break;
+        default:
+            fprintf(stderr, "Usage: jekfind [start_dir] [options]\n");
+            return -1;
+        }
+        if ((flags->file == 0) && (flags->directory == 0)) {
+            flags->file = 1;
+            flags->directory = 1;
+        }
+        return 0;
+    }
+
+    return 0;
 }
 int main(int argc, char *argv[]) {
     if (argc < 2) {
