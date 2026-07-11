@@ -9,3 +9,5 @@ typedef struct {
 } Flags;
 
 int handle_flags(int argc, char *argv[], Flags *flags);
+
+int print_entry(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
