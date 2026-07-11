@@ -1,95 +1,21 @@
 # jekfind syscall / libc reference
 
-How to walk a file tree from a starting directory, and how to work out where you are relative to the system root (`/`). Covers `nftw()`, the manual `opendir`/`readdir`/`stat` recursion it wraps, and the path helpers (`getcwd`, `realpath`, `dirname`/`basename`).
+How to walk a file tree from a starting directory using `opendir` / `readdir` / `lstat` + recursion (no `nftw`), and how to work out where you are relative to the system root (`/`). Covers the directory-stream primitives, `struct stat`, and the path helpers (`getcwd`, `realpath`, `dirname`/`basename`).
 
-## 1. `nftw()` — the easy button for tree walking
+## 1. The manual tree walk: `opendir` / `readdir` / `lstat` + recursion
 
-```c
-#include <ftw.h>
-
-int nftw(const char *dirpath,
-         int (*fn)(const char *fpath, const struct stat *sb,
-                   int typeflag, struct FTW *ftwbuf),
-         int nopenfd,
-         int flags);
-```
-
-`nftw` = "new file tree walk". You hand it a starting directory and a callback. It recurses the whole subtree for you and calls your callback once per entry (files, directories, symlinks — everything). This is exactly the "recursive directory traversal" jekfind is built around, so `nftw` is the shortcut version of what section 2 does by hand.
-
-**Arguments**
-
-| Argument | Meaning |
-|----------|---------|
-| `dirpath` | Where to start (e.g. `"."` or `"/home/jemanuel"`). |
-| `fn` | Your callback, called for every entry found. |
-| `nopenfd` | Max number of directory file descriptors `nftw` may hold open at once. It uses one per level of depth. A sane value is 15–20; if the tree is deeper, `nftw` closes/reopens dirs as needed (slower but still correct). Not a limit on tree depth. |
-| `flags` | Bitwise OR of the `FTW_*` option flags below. |
-
-**Return:** `0` if the whole walk finished. If your callback ever returns non-zero, `nftw` stops immediately and returns that same value (this is how you do an early exit / "found it, stop"). `-1` on a setup error (`errno` set).
-
-**The callback arguments**
-
-| Argument | Meaning |
-|----------|---------|
-| `fpath` | Full path to the current entry, built from `dirpath`. If you started at `"."`, paths look like `"./src/main.c"`. If you started at `"/home"`, they look like `"/home/jemanuel/file"`. |
-| `sb` | Pointer to the stat struct for this entry (size, mode, mtime, …). Same data as calling `stat()` yourself — see section 3. |
-| `typeflag` | What kind of entry this is (see next table). |
-| `ftwbuf` | `struct FTW` with two useful fields: `ftwbuf->level` = depth below the start dir (start = 0); `ftwbuf->base` = offset into `fpath` where the basename starts, i.e. `fpath + ftwbuf->base` is just the filename without the leading directories. |
-
-**`typeflag` values (what the current entry is)**
-
-| Value | Meaning |
-|-------|---------|
-| `FTW_F` | A regular file. |
-| `FTW_D` | A directory, reported BEFORE its contents (pre-order). |
-| `FTW_DP` | A directory, reported AFTER its contents. Only happens if you pass `FTW_DEPTH` in flags. Use this when you need to process a directory's children before the directory itself (e.g. deleting a tree, or summing child sizes). |
-| `FTW_SL` | A symbolic link (reported when you pass `FTW_PHYS`). |
-| `FTW_SLN` | A dangling symlink (points at something that doesn't exist). |
-| `FTW_DNR` | A directory that can't be read (permissions). Its contents are skipped. |
-| `FTW_NS` | `stat()` failed on this entry, so `sb` is NOT valid — don't touch it. Usually a permissions problem on the parent dir. |
-
-**`flags` (bitwise OR them together)**
-
-| Flag | Meaning |
-|------|---------|
-| `FTW_PHYS` | Physical walk: do NOT follow symlinks, and report them as `FTW_SL`. Almost always what you want for a find-like tool, so you don't loop forever on a link that points back up the tree. |
-| `FTW_MOUNT` | Stay on one filesystem; don't cross mount points. |
-| `FTW_DEPTH` | Post-order traversal: report a directory (`FTW_DP`) only after all its children. Without this you get pre-order (`FTW_D` first). |
-
-**Minimal skeleton**
+This is the core of jekfind. You open a directory, read its entries one at a time, and recurse into any entry that is itself a directory. jek_ls already uses `opendir`/`readdir`/`stat` for a single directory — this is the same primitives plus recursion.
 
 ```c
-static int cb(const char *fpath, const struct stat *sb,
-              int typeflag, struct FTW *ftwbuf) {
-    (void)sb;
-    const char *name = fpath + ftwbuf->base;   // basename only
-    if (typeflag == FTW_D)      printf("[dir]  %s\n", fpath);
-    else if (typeflag == FTW_F) printf("[file] %s (name=%s)\n", fpath, name);
-    return 0;   // return non-zero to stop the walk early
-}
+#include <dirent.h>   // opendir, readdir, closedir, struct dirent
+#include <sys/stat.h> // lstat, struct stat, S_ISDIR
+#include <string.h>   // strcmp
+#include <stdio.h>    // snprintf, perror
+#include <limits.h>   // PATH_MAX
 
-int main(void) {
-    // start ".", up to 20 open fds, don't follow symlinks
-    if (nftw(".", cb, 20, FTW_PHYS) == -1) {
-        perror("nftw");
-        return 1;
-    }
-    return 0;
-}
-```
-
-For jekfind this maps cleanly: `-type f` → only act on `FTW_F`, `-type d` → only `FTW_D`. `-name`/`-contains` → compare (`fpath + ftwbuf->base`) against the target with `strcmp` / `strstr` / `strcasecmp`.
-
-> **Caveat:** `nftw` has no way to pass your own context pointer into the callback (no `void*` userdata arg). So the `Flags` struct in `jekfind.h` has to be reached via a file-scope (static global) variable.
-
-## 2. Doing it by hand: `opendir` / `readdir` / `stat` + recursion
-
-`nftw` is just a wrapper over this. Worth writing once yourself so you know what it's doing — and jek_ls already uses `opendir`/`readdir`/`stat`, so this is the same primitives plus recursion.
-
-```c
 void walk(const char *path) {
     DIR *d = opendir(path);
-    if (!d) { perror(path); return; }
+    if (!d) { perror(path); return; }   // e.g. permission denied; skip it
 
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
@@ -105,23 +31,67 @@ void walk(const char *path) {
         // lstat, not stat, so symlinks aren't followed (no loops).
         if (lstat(child, &sb) == -1) { perror(child); continue; }
 
-        printf("%s\n", child);
+        printf("%s\n", child);      // <-- where jekfind decides to print or not
 
         if (S_ISDIR(sb.st_mode))
-            walk(child);          // recurse into subdirectory
+            walk(child);            // recurse into subdirectory
     }
     closedir(d);
 }
 ```
 
-**Key points that bite people**
+### The three primitives
 
-- `readdir` returns `.` and `..` — you MUST skip them.
-- `struct dirent` has `d_type` (`DT_DIR`, `DT_REG`, `DT_LNK`, …) which can save a `stat()` call, BUT some filesystems return `DT_UNKNOWN`, so you still need a `stat()` fallback.
-- Use `lstat` (not `stat`) when recursing so a symlinked directory doesn't send you into a loop — this is the manual equivalent of `nftw`'s `FTW_PHYS`.
-- `snprintf` (not `strcpy`/`strcat`) to build paths, so you can't overflow.
+**`opendir`** — open a directory for reading. Returns a `DIR *` stream, or `NULL` on error (`errno` set — e.g. `EACCES` if you can't read it). Always check for `NULL`; a find-like tool hits unreadable directories all the time and should skip them, not crash.
 
-## 3. `struct stat` — what you learn about each entry
+```c
+DIR *opendir(const char *name);
+```
+
+**`readdir`** — return the next entry in the stream, one call at a time, or `NULL` when there are no more entries (or on error). You do NOT free the returned pointer; it points into storage owned by the `DIR` stream and is overwritten on the next `readdir` call.
+
+```c
+struct dirent *readdir(DIR *dirp);
+```
+
+`struct dirent` — the fields you can portably rely on:
+
+| Field | Meaning |
+|-------|---------|
+| `d_name` | The entry's filename (basename only — no path). This is the one you'll use most. |
+| `d_type` | Entry type *hint*: `DT_DIR`, `DT_REG`, `DT_LNK`, `DT_UNKNOWN`, … Can save a `stat()` call, BUT some filesystems always return `DT_UNKNOWN`, so you still need an `lstat` fallback. |
+| `d_ino` | Inode number. |
+
+**`closedir`** — close the stream and free it. One call per successful `opendir`. Forgetting this leaks a file descriptor per directory, and with deep recursion you'll run out.
+
+```c
+int closedir(DIR *dirp);
+```
+
+### Key points that bite people
+
+- `readdir` returns `.` and `..` — you **MUST** skip them, or `walk(child)` recurses into `.` forever.
+- Order is **not** sorted — entries come back in whatever order the filesystem stores them. If you want sorted output, collect names and `qsort` them (or look at `scandir`, which does both in one call).
+- Use `lstat`, not `stat`, when deciding whether to recurse — otherwise a symlink pointing back up the tree sends you into an infinite loop. `lstat` reports the *link itself*, so a symlinked directory shows up as a symlink (not a dir) and you won't descend into it.
+- Build paths with `snprintf` (not `strcpy`/`strcat`) so an over-long name can't overflow `child`. `snprintf` truncates instead. If you want to be strict, check its return value against `sizeof child` and skip paths that would truncate.
+- `readdir` returning `NULL` means "end of directory" OR "error". If you need to tell them apart, set `errno = 0` before the call and check it after. For jekfind, treating `NULL` as "done" is fine.
+- Recursion depth = tree depth. Very deep trees can blow the C stack; for jekfind's scale that's not a concern, but it's why production tools sometimes use an explicit stack instead.
+
+### How the flags map onto the walk
+
+At the `printf` line above, jekfind decides whether to actually print `child`, using the `Flags` struct:
+
+- `-t f` (`flags->file`) → only print when `S_ISREG(sb.st_mode)`.
+- `-t d` (`flags->directory`) → only print when `S_ISDIR(sb.st_mode)`.
+- neither set → print both (your default in `handle_flags`).
+- `-n foo` (`flags->name`) → print only if `strcasecmp(e->d_name, flags->name_string) == 0` (case-insensitive exact match; `strcasecmp` from `<strings.h>`).
+- `-c foo` (`flags->contains`) → print only if `strstr(e->d_name, flags->contains_string) != NULL` (substring match).
+
+Note the type test (recurse) and the print test are separate: with `-t f` you still recurse into directories, you just don't *print* them. Match against `e->d_name` (the basename), not the full `child` path, so `-n main.c` doesn't accidentally match a directory name in the path.
+
+Unlike `nftw`, a hand-written `walk` can take the `Flags *` as a parameter (or you pass the fields you need) — no need for a file-scope global to smuggle context into a callback.
+
+## 2. `struct stat` — what you learn about each entry
 
 ```c
 #include <sys/stat.h>
@@ -138,11 +108,17 @@ fstat(fd,   &sb);   // for an already-open file descriptor
 | `sb.st_mode` | Type + permission bits. Test the type with the `S_IS*` macros: `S_ISREG(sb.st_mode)` regular file, `S_ISDIR(sb.st_mode)` directory, `S_ISLNK(sb.st_mode)` symlink (only meaningful after `lstat`). |
 | `sb.st_size` | Size in bytes (files). |
 | `sb.st_mtime` | Last modification time (seconds). `st_mtim.tv_nsec` for ns. (jek_ls already prints this field.) |
-| `sb.st_ino` | Inode number. (`st_dev`, `st_ino`) together uniquely identify a file — how you'd detect hardlinks or a link that loops back. |
+| `sb.st_ino` | Inode number. (`st_dev`, `st_ino`) together uniquely identify a file — how you'd detect hardlinks or a symlink that loops back onto an ancestor. |
 
-In an `nftw` callback you already get this as `*sb`, so you rarely call `stat` yourself during a walk.
+**Type macros you'll actually use in the walk**
 
-## 4. "Where am I relative to `/`" — absolute paths and the root
+| Macro | True when the entry is a… |
+|-------|---------------------------|
+| `S_ISREG(sb.st_mode)` | regular file (`-t f`) |
+| `S_ISDIR(sb.st_mode)` | directory (`-t d`, and what triggers recursion) |
+| `S_ISLNK(sb.st_mode)` | symlink (only after `lstat`; `stat` would report the target's type) |
+
+## 3. "Where am I relative to `/`" — absolute paths and the root
 
 **`getcwd`** — the process's current working directory as an absolute path:
 
@@ -178,13 +154,15 @@ char *dir  = dirname(tmp1);   // "/home/jemanuel"
 char *base = basename(tmp2);  // "file.c"
 ```
 
-## 5. man pages to read next
+Note: in the walk you already have the basename for free as `e->d_name`, so you rarely need `basename` during traversal — it's more useful for parsing a path you were *handed*.
+
+## 4. man pages to read next
 
 | Command | Covers |
 |---------|--------|
-| `man 3 nftw` | Documents `struct FTW` and all the flags |
-| `man 3 opendir` / `man 3 readdir` / `man 3 closedir` | Directory streams |
+| `man 3 opendir` / `man 3 readdir` / `man 3 closedir` | Directory streams and `struct dirent` |
 | `man 2 stat` | `struct stat`, the `S_IS*` macros |
+| `man 3 scandir` | `readdir` + sorting + filtering in one call, if you want ordered output |
 | `man 3 getcwd` | Current working directory |
 | `man 3 realpath` | Canonical absolute paths |
 | `man 3 basename` | Covers `dirname` too, and the copy-your-arg warning |
