@@ -148,10 +148,6 @@ int handle_flags(int argc, char *argv[], Flags *flags) {
     return 0;
 }
 
-int recursive_chungus(char *dir_loc) {}
-
-int start_traverse(Flags *flags) {}
-
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "USAGE: jekfind [start_dir] [options]");
