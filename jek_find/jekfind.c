@@ -90,7 +90,16 @@ int add_job(Job_Pool *pool, char *path) {
     return 0;
 }
 
-void *run_worker(void *arg) {}
+void *run_worker(void *arg) {
+    Job_Pool *pool = (Job_Pool *)arg;
+    while (1) {
+        int lock_mutex = pthread_mutex_lock(&pool->lock);
+        if (lock_mutex != 0) {
+            perror("Error Locking Mutex");
+            // return 1;
+        }
+    }
+}
 
 Job_Pool *init_pool() {
     Job_Pool *job_pool = (Job_Pool *)(malloc(sizeof(Job_Pool)));
@@ -108,7 +117,22 @@ Job_Pool *init_pool() {
     return job_pool;
 }
 
-int init_workers(Job_Pool *pool) {}
+// Create a worker for each running core on the cpu
+// This is currently just a linux implementation
+int init_workers(Job_Pool *pool) {
+    int num_cpu = (int)sysconf(_SC_NPROCESSORS_ONLN);
+    pthread_t threads[num_cpu];
+
+    for (int i = 0; i < num_cpu; i++) {
+        int create_thread = pthread_create(threads, NULL, run_worker, pool);
+        if (create_thread != 0) {
+            perror("Error Creating Thread");
+            return 1;
+        }
+    }
+
+    return 0;
+}
 
 int handle_flags(int argc, char *argv[], Flags *flags) {
     int opt;
