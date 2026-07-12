@@ -57,6 +57,7 @@ Dir_Node *get_job(Job_Pool *pool) {
         pool->head = pool->head->next;
     } else {
         pool->head = NULL;
+        pool->tail = NULL;
     }
 
     return job;
@@ -89,7 +90,7 @@ int add_job(Job_Pool *pool, char *path) {
     return 0;
 }
 
-void run_worker(void *arg) {}
+void *run_worker(void *arg) {}
 
 Job_Pool *init_pool() {
     Job_Pool *job_pool = (Job_Pool *)(malloc(sizeof(Job_Pool)));
@@ -107,9 +108,11 @@ Job_Pool *init_pool() {
     return job_pool;
 }
 
+int init_workers(Job_Pool *pool) {}
+
 int handle_flags(int argc, char *argv[], Flags *flags) {
     int opt;
-    while ((opt = getopt(argc, argv, "n:c:t:"))) {
+    while ((opt = getopt(argc, argv, "n:c:t:")) != -1) {
         switch (opt) {
         case 'n':
             flags->name = 1;
@@ -136,11 +139,10 @@ int handle_flags(int argc, char *argv[], Flags *flags) {
             fprintf(stderr, "Usage: jekfind [start_dir] [options]\n");
             return -1;
         }
-        if ((flags->file == 0) && (flags->directory == 0)) {
-            flags->file = 1;
-            flags->directory = 1;
-        }
-        return 0;
+    }
+    if ((flags->file == 0) && (flags->directory == 0)) {
+        flags->file = 1;
+        flags->directory = 1;
     }
 
     return 0;

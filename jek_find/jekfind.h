@@ -1,6 +1,7 @@
 #include <limits.h>
 #include <linux/limits.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 typedef struct {
     int name;
@@ -38,12 +39,10 @@ int init_workers(Job_Pool *pool);
 
 Job_Pool *init_pool(void);
 
-void run_worker(void *arg);
+void *run_worker(void *arg);
 
 Dir_Node *get_job(Job_Pool *pool);
 
 int add_job(Job_Pool *pool, char *path);
 
 int handle_flags(int argc, char *argv[], Flags *flags);
-
-int print_entry(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
