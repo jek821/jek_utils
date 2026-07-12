@@ -156,8 +156,6 @@ int main(int argc, char *argv[]) {
     // Initialize the flags struct with 0 values
     Flags *flags = calloc(1, sizeof(Flags));
     handle_flags(argc, argv, flags);
-    // Now we can traverse from root and check each file/dir (depending on flags)
-    // For the target we are looking for
-    start_traverse(flags);
+
     return 0;
 }
