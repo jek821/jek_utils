@@ -12,7 +12,7 @@ typedef struct {
     char *start_dir;
 } Flags;
 
-typedef struct Dir_Node{
+typedef struct Dir_Node {
     char path[PATH_MAX];
     struct Dir_Node *next;
 } Dir_Node;
@@ -34,7 +34,11 @@ typedef struct {
 
 } Job_Pool;
 
+void run_worker(void *arg);
 
+Dir_Node *get_job(Job_Pool *pool);
+
+int add_job(Job_Pool *pool, char *path);
 
 int handle_flags(int argc, char *argv[], Flags *flags);
 
