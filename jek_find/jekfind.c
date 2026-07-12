@@ -101,7 +101,7 @@ void *run_worker(void *arg) {
     }
 }
 
-Job_Pool *init_pool() {
+Job_Pool *init_pool(void) {
     Job_Pool *job_pool = (Job_Pool *)(malloc(sizeof(Job_Pool)));
     pthread_mutex_init(&job_pool->lock, NULL);
     pthread_cond_init(&job_pool->job_ready, NULL);
