@@ -1,12 +1,13 @@
 #include "jekfind.h"
 #include <dirent.h>
+#include <errno.h>
 #include <getopt.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
 // Usage:
 // jekfind [start_dir] [options]
 // Examples:
@@ -93,10 +94,22 @@ int add_job(Job_Pool *pool, char *path) {
 void *run_worker(void *arg) {
     Job_Pool *pool = (Job_Pool *)arg;
     while (1) {
-        int lock_mutex = pthread_mutex_lock(&pool->lock);
-        if (lock_mutex != 0) {
-            perror("Error Locking Mutex");
-            // return 1;
+        pthread_mutex_lock(&pool->lock);
+        while (pool->job_count == 0 && !pool->stop) {
+            int worker_wait = pthread_cond_wait(&pool->job_ready, &pool->lock);
+            if (worker_wait != 0) {
+                pool->worker_err = worker_wait;
+                // Need to unlock before returning from error
+                pthread_mutex_unlock(&pool->lock);
+                pool->stop = 1;
+                return NULL;
+            }
+        }
+        // If we get here the worker has been woken up
+        // we need to check if its for a shutdown, or for a job
+        if (pool->stop) {
+            pthread_mutex_unlock(&pool->lock);
+            return NULL;
         }
     }
 }
@@ -113,6 +126,8 @@ Job_Pool *init_pool(void) {
     job_pool->active_workers = 0;
     job_pool->job_count = 0;
     job_pool->stop = 0;
+
+    job_pool->worker_err = 0;
 
     return job_pool;
 }
