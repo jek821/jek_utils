@@ -26,6 +26,52 @@
 //  int directory;
 //  char* start_dir;
 
+
+// Dir_Node struct: 
+//  char path[PATH_MAX];
+//  struct Dir_Node *next;
+// 
+// 
+// Job_Pool struct:
+//  // pthread lock and conditions
+//  pthread_mutex_t lock;
+//  pthread_cond_t job_ready; 
+//  pthread_cond_t traversal_complete;
+// 
+//  // FIFO Queue (linked list)
+//  Dir_Node *head;
+//  Dir_Node *tail;
+// 
+//  // Worker Flags
+//  int active_workers;
+//  int job_count;
+//  int stop;
+
+
+
+int add_job(Job_Pool *pool, char *path){
+    // When we add jobs lets just put them as the tail of the Linked List 
+    // Then when we pop a job we just take the head 
+    Dir_Node *new_job = (Dir_Node *)malloc(sizeof(Dir_Node));
+    if (new_job == NULL) {
+        perror("error in add_job: ");
+        return -1; 
+    }
+    // String copy does not add null terminator for some reason??
+    strncpy(new_job->, path, PATH_MAX - 1);
+    new_job->path[PATH_MAX - 1] = '\0';
+    new_job->next = NULL; 
+
+    // Add new job to the end of the FIFO Linked List Queue 
+    if (pool->head == NULL){
+        pool->head = new_job;
+        pool->tail = new_job; 
+    }
+
+
+}
+
+
 int handle_flags(int argc, char *argv[], Flags *flags) {
     int opt;
     while ((opt = getopt(argc, argv, "n:c:t:"))) {
