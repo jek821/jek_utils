@@ -91,6 +91,22 @@ int add_job(Job_Pool *pool, char *path) {
 
 void run_worker(void *arg) {}
 
+Job_Pool *init_pool() {
+    Job_Pool *job_pool = (Job_Pool *)(malloc(sizeof(Job_Pool)));
+    pthread_mutex_init(&job_pool->lock, NULL);
+    pthread_cond_init(&job_pool->job_ready, NULL);
+    pthread_cond_init(&job_pool->traversal_complete, NULL);
+
+    job_pool->head = NULL;
+    job_pool->tail = NULL;
+
+    job_pool->active_workers = 0;
+    job_pool->job_count = 0;
+    job_pool->stop = 0;
+
+    return job_pool;
+}
+
 int handle_flags(int argc, char *argv[], Flags *flags) {
     int opt;
     while ((opt = getopt(argc, argv, "n:c:t:"))) {

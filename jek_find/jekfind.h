@@ -34,6 +34,10 @@ typedef struct {
 
 } Job_Pool;
 
+int init_workers(Job_Pool *pool);
+
+Job_Pool *init_pool(void);
+
 void run_worker(void *arg);
 
 Dir_Node *get_job(Job_Pool *pool);
