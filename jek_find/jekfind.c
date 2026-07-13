@@ -1,6 +1,5 @@
 #include "jekfind.h"
 #include <dirent.h>
-#include <errno.h>
 #include <getopt.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -99,7 +98,6 @@ void *run_worker(void *arg) {
             int worker_wait = pthread_cond_wait(&pool->job_ready, &pool->lock);
             if (worker_wait != 0) {
                 pool->worker_err = worker_wait;
-                // Need to unlock before returning from error
                 pool->stop = 1;
                 pthread_mutex_unlock(&pool->lock);
                 return NULL;
@@ -111,26 +109,44 @@ void *run_worker(void *arg) {
             pthread_mutex_unlock(&pool->lock);
             return NULL;
         }
+
+        // if we get here it means the worker was woken for a job
+
+        // pull the job off of the queue (then we can unlock the mutex so we don't block work while
+        // we do this job)
+        Dir_Node *job = get_job(pool);
+        pthread_mutex_unlock(&pool->lock);
     }
 }
 
-// !!!DO NOT FORGET TO WALK THE QUEUE AND FREE EACH JOB STRUCT!!!
 void pool_destructor(Job_Pool *pool) {
     pthread_mutex_destroy(&pool->lock);
-    pthread_cond_destroy(&job_ready);
-    pthread_cond_destroy(&traversal_complete); 
+    pthread_cond_destroy(&pool->job_ready);
+    pthread_cond_destroy(&pool->traversal_complete);
 
     // Walk the linked list freeing all of the jobs
     // (if there are any)
-    if (pool->head == NULL){
+    if (pool->head == NULL) {
         // if there is nothing in the linked List
         free(pool->head);
+        pool->head = NULL;
         free(pool->tail);
-    }else{ 
-        while(pool->head != NULL){
-
+        pool->tail = NULL;
+    } else {
+        while (pool->head != NULL) {
+            Dir_Node *curr_node = pool->head;
+            if (curr_node->next == NULL) {
+                free(curr_node);
+                curr_node = NULL;
+            } else {
+                pool->head = curr_node->next;
+                free(curr_node);
+                curr_node = NULL;
+            }
         }
     }
+    free(pool);
+    pool = NULL;
 }
 
 Job_Pool *init_pool(void) {
@@ -166,10 +182,12 @@ int init_workers(Job_Pool *pool) {
     }
 
     for (int i = 0; i < num_cpu; i++) {
-        pthread_join(threads[i], NULL); 
+        pthread_join(threads[i], NULL);
     }
     // After all workers have returned it is safe to DESTROY THE POOl!
     pool_destructor(pool);
+
+    return 0;
 }
 
 int handle_flags(int argc, char *argv[], Flags *flags) {
@@ -211,6 +229,7 @@ int handle_flags(int argc, char *argv[], Flags *flags) {
 }
 
 int main(int argc, char *argv[]) {
+    fprintf(stdout, "hello jacob");
     if (argc < 2) {
         fprintf(stderr, "USAGE: jekfind [start_dir] [options]");
         return 1;

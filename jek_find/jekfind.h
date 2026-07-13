@@ -32,10 +32,12 @@ typedef struct {
     int active_workers;
     int job_count;
     int stop;
-    
+
     // Worker Context (for error handling)
     int worker_err;
 } Job_Pool;
+
+void pool_destructor(Job_Pool *pool);
 
 int init_workers(Job_Pool *pool);
 
