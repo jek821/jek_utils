@@ -11,11 +11,11 @@
 // jekfind [start_dir] [options]
 // Examples:
 // jekfind . (print everything in working directory, and in those contained directories recursively)
-// jekfind . --name foo (print any file or directory whose name is foo no case sensitivity)
-// jekfind . --contains foo (print any file or directory whose name contains the string foo)
-// jekfind . --type  f (same as [jekfind .], but only prints files)
-// jekfind . --type d (same as [jekfind .], but only prints directories)
-// --type and --name/--contains can be combined in any order
+// jekfind . -n foo (print any file or directory whose name is foo no case sensitivity)
+// jekfind . -c foo (print any file or directory whose name contains the string foo)
+// jekfind . -t f (same as [jekfind .], but only prints files)
+// jekfind . -t d (same as [jekfind .], but only prints directories)
+// -t and -n/-c can be combined in any order
 
 // Flags Struct:
 //  int name;
@@ -45,7 +45,11 @@
 //  int active_workers;
 //  int job_count;
 //  int stop;
+//
+//  // Worker Context (for error handling)
+//  int worker_err;
 
+// DOES NOT INFLUENCE MUTEX, THREAD SAFETY IS MANTAINED BY WORKERS
 Dir_Node *get_job(Job_Pool *pool) {
     if (pool->head == NULL) {
         return NULL;
@@ -63,6 +67,7 @@ Dir_Node *get_job(Job_Pool *pool) {
     return job;
 }
 
+// DOES NOT INFLUENCE MUTEX, THREAD SAFETY IS MANTAINED BY WORKERS
 int add_job(Job_Pool *pool, char *path) {
     // When we add jobs lets just put them as the tail of the Linked List
     // Then when we pop a job we just take the head
@@ -129,27 +134,16 @@ void pool_destructor(Job_Pool *pool) {
 
     // Walk the linked list freeing all of the jobs
     // (if there are any)
-    if (pool->head == NULL) {
-        // if there is nothing in the linked List
-        free(pool->head);
-        pool->head = NULL;
-        free(pool->tail);
-        pool->tail = NULL;
-    } else {
-        while (pool->head != NULL) {
-            Dir_Node *curr_node = pool->head;
-            if (curr_node->next == NULL) {
-                free(curr_node);
-                curr_node = NULL;
-            } else {
-                pool->head = curr_node->next;
-                free(curr_node);
-                curr_node = NULL;
-            }
-        }
+    Dir_Node *curr = pool->head;
+    while (curr != NULL) {
+        Dir_Node *next = curr->next;
+        free(curr);
+        curr = next;
     }
+    pool->head = NULL;
+    pool->tail = NULL;
+
     free(pool);
-    pool = NULL;
 }
 
 Job_Pool *init_pool(void) {
@@ -177,7 +171,7 @@ int init_workers(Job_Pool *pool) {
     pthread_t threads[num_cpu];
 
     for (int i = 0; i < num_cpu; i++) {
-        int create_thread = pthread_create(threads, NULL, run_worker, pool);
+        int create_thread = pthread_create(&threads[i], NULL, run_worker, pool);
         if (create_thread != 0) {
             perror("Error Creating Thread");
             return 1;
