@@ -100,8 +100,8 @@ void *run_worker(void *arg) {
             if (worker_wait != 0) {
                 pool->worker_err = worker_wait;
                 // Need to unlock before returning from error
-                pthread_mutex_unlock(&pool->lock);
                 pool->stop = 1;
+                pthread_mutex_unlock(&pool->lock);
                 return NULL;
             }
         }
@@ -110,6 +110,25 @@ void *run_worker(void *arg) {
         if (pool->stop) {
             pthread_mutex_unlock(&pool->lock);
             return NULL;
+        }
+    }
+}
+
+// !!!DO NOT FORGET TO WALK THE QUEUE AND FREE EACH JOB STRUCT!!!
+void pool_destructor(Job_Pool *pool) {
+    pthread_mutex_destroy(&pool->lock);
+    pthread_cond_destroy(&job_ready);
+    pthread_cond_destroy(&traversal_complete); 
+
+    // Walk the linked list freeing all of the jobs
+    // (if there are any)
+    if (pool->head == NULL){
+        // if there is nothing in the linked List
+        free(pool->head);
+        free(pool->tail);
+    }else{ 
+        while(pool->head != NULL){
+
         }
     }
 }
@@ -146,7 +165,11 @@ int init_workers(Job_Pool *pool) {
         }
     }
 
-    return 0;
+    for (int i = 0; i < num_cpu; i++) {
+        pthread_join(threads[i], NULL); 
+    }
+    // After all workers have returned it is safe to DESTROY THE POOl!
+    pool_destructor(pool);
 }
 
 int handle_flags(int argc, char *argv[], Flags *flags) {
