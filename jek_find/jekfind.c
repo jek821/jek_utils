@@ -116,6 +116,9 @@ void *run_worker(void *arg) {
         // we do this job)
         Dir_Node *job = get_job(pool);
         pthread_mutex_unlock(&pool->lock);
+
+        DIR *dir = opendir(job->path);
+        if (dir == NULL) // CHECK WHAT HAPPENS IF WE OPEN AN EMPTY DIR
     }
 }
 
