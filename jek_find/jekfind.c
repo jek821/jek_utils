@@ -123,10 +123,11 @@ void *run_worker(void *arg) {
         pthread_mutex_unlock(&pool->lock);
 
         DIR *dir = opendir(job->path);
-        if (dir == NULL) // CHECK WHAT HAPPENS IF WE OPEN AN EMPTY DIR
+        if (dir == NULL) {
+            // CHECK WHAT HAPPENS IF WE OPEN AN EMPTY DIR
+        }
     }
 }
-
 void pool_destructor(Job_Pool *pool) {
     pthread_mutex_destroy(&pool->lock);
     pthread_cond_destroy(&pool->job_ready);
