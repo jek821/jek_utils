@@ -4,9 +4,14 @@ Reimplementations of standard Unix CLI tools written in C from scratch.
 
 ## Why
 
-Most real-world projects are large enough that you spend most of your time thinking about architecture, abstractions, and coordination — not the code itself at a functional level. These small, self-contained programs flip that: each one is a focused exercise where the interesting work is in getting the low-level details right.
+This isn't a loose grab-bag of Unix clones — it's a deliberate ladder. Each tool teaches a specific low-level skill (syscalls, file I/O, threading, wire protocols, cryptography, networking) that gets reused as a building block toward two eventual capstone projects:
 
-The secondary goal is building fluency with the Unix programming interface — syscalls, file descriptors, error handling, process semantics — as groundwork toward eventually contributing to the Linux kernel.
+- **jeksync** — a distributed file sync tool: walk a tree, hash and diff files, encrypt, and transfer changes over a custom wire protocol.
+- **jekvpn** — a small mesh VPN with a coordination server, in the spirit of Tailscale/headscale: encrypted peer-to-peer tunnels plus a control plane that hands out peer maps.
+
+See [`Docs/sync_plan.txt`](Docs/sync_plan.txt) and [`Docs/vpn_plan.txt`](Docs/vpn_plan.txt) for the full roadmaps — which tool teaches which skill, and how the two capstones share most of their trunk.
+
+Along the way, each tool is also a focused exercise in getting the low-level details right without a framework or abstraction hiding them — building fluency with the Unix programming interface itself: syscalls, file descriptors, error handling, process semantics.
 
 ## Platform
 
@@ -35,6 +40,7 @@ So a tool named `foo` lives in `jek_foo/` and contains:
 | `jekfoo.h` | Header with prototypes (and any shared types) |
 | `Makefile` | Builds `jekfoo`, with `install` / `uninstall` / `clean` / `test` targets |
 | `test.sh` | Test suite, runnable via `make test` |
+| `README.md` | Usage, flags, and syscalls/APIs used |
 
 The compiled binary is `jek_foo/jekfoo` (no extension). The root `.gitignore` relies on this convention — it ignores `jek_*/jek*` while keeping `*.c` / `*.h` / `*.sh`, so build artifacts are never committed and **no `.gitignore` edits are needed when you add a new tool.**
 
@@ -42,78 +48,11 @@ The compiled binary is `jek_foo/jekfoo` (no extension). The root `.gitignore` re
 
 | Tool | Description |
 |------|-------------|
-| [`jek_cat`](#jek_cat) | Reads a file and writes its contents to stdout, handling partial writes and read errors |
-| [`jek_wc`](#jek_wc) | Counts bytes, lines, and/or words in a file, selected by flags |
-| [`jek_ls`](#jek_ls) | Lists the contents of the current directory, with modification times and color for subdirectories |
+| [`jek_cat`](jek_cat/README.md) | Reads a file and writes its contents to stdout, handling partial writes and read errors |
+| [`jek_wc`](jek_wc/README.md) | Counts bytes, lines, and/or words in a file, selected by flags |
+| [`jek_ls`](jek_ls/README.md) | Lists the contents of the current directory, with modification times and color for subdirectories |
 
----
-
-### jek_cat
-
-A reimplementation of [`cat(1)`](https://man7.org/linux/man-pages/man1/cat.1.html).
-
-**Usage**
-
-```sh
-jekcat <file>
-```
-
-**Syscalls used**
-
-| Syscall | Man page |
-|---------|----------|
-| `open` | [open(2)](https://man7.org/linux/man-pages/man2/open.2.html) |
-| `read` | [read(2)](https://man7.org/linux/man-pages/man2/read.2.html) |
-| `write` | [write(2)](https://man7.org/linux/man-pages/man2/write.2.html) |
-| `close` | [close(2)](https://man7.org/linux/man-pages/man2/close.2.html) |
-
----
-
-### jek_wc
-
-A reimplementation of [`wc(1)`](https://man7.org/linux/man-pages/man1/wc.1.html). Flags control which counts are shown; any combination is valid.
-
-**Usage**
-
-```sh
-jekwc [-b] [-l] [-w] <file>
-```
-
-| Flag | Effect |
-|------|--------|
-| `-b` | Print byte count |
-| `-l` | Print line count |
-| `-w` | Print word count |
-
-**Syscalls used**
-
-| Syscall | Man page |
-|---------|----------|
-| `open` | [open(2)](https://man7.org/linux/man-pages/man2/open.2.html) |
-| `read` | [read(2)](https://man7.org/linux/man-pages/man2/read.2.html) |
-| `close` | [close(2)](https://man7.org/linux/man-pages/man2/close.2.html) |
-
----
-
-### jek_ls
-
-A reimplementation of [`ls(1)`](https://man7.org/linux/man-pages/man1/ls.1.html). Lists entries in the current directory, printing each entry's name and last modification time. Directory entries are highlighted in blue.
-
-**Usage**
-
-```sh
-jekls
-```
-
-**APIs used**
-
-| Function | Man page |
-|----------|----------|
-| `opendir` | [opendir(3)](https://man7.org/linux/man-pages/man3/opendir.3.html) |
-| `readdir` | [readdir(3)](https://man7.org/linux/man-pages/man3/readdir.3.html) |
-| `stat` | [stat(2)](https://man7.org/linux/man-pages/man2/stat.2.html) |
-
----
+`jek_find` and `jek_sum` are in progress and will be added here once they're functional.
 
 ## Build system
 
