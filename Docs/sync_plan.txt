@@ -4,6 +4,20 @@ jeksync roadmap
 Goal: build a custom file tracking and syncing tool (jeksync).
 Each tool below teaches a skill that jeksync directly depends on.
 
+--- libjek (the shared core) ---
+
+  Each phase below is written first as a standalone tool. When a SECOND
+  consumer needs the same logic, it gets extracted into libjek/ -- the shared
+  core the tools and both capstones (jeksync, jekvpn) link against. Extraction
+  is organic, driven by noticing overlap while building; it is NOT a scheduled
+  phase and does not come first. libjek is a destination, not a milestone.
+  See libjek/README.md. First likely extraction: file-tree traversal, needed
+  by jekfind and jeksum both.
+
+  What separates jeksync (real) from a one-shot file copier (toy) is NOT any
+  tool below -- it is the durability layer in "MAKING IT REAL", after the
+  happy path. A plan that stops at Phase 10 produces a demo, not a sync tool.
+
 --- C DOMAIN ---
 
 PHASE 1 - File I/O
@@ -42,12 +56,54 @@ PHASE 9 - Networking (C)
   jekrecv -- server: socket(), bind(), listen(), accept(), recv() and write to disk
              layer jekencrypt on top to send encrypted files
 
-PHASE 10 - jeksync
+PHASE 10 - jeksync (the happy path)
   combine everything:
     - jekfind  to walk a directory tree
     - jeksum   to hash files and detect what changed
     - jekdiff  to compare local and remote state
     - jekencrypt to encrypt before sending
     - jekproto / jeksend / jekrecv to transfer over the wire
+
+  SCOPE DECISION: jeksync is a ONE-DIRECTIONAL mirror (push/pull), not a
+  two-way merge. This makes "what changed" and "who wins" well-defined instead
+  of hand-waved. Bidirectional merge is a named future upgrade, not a pretended-
+  solved problem. Transfer is WHOLE-FILE in v1 (see Phase 12 for block-delta).
+
+  Phase 10 alone = a demo that copies new files. The phases below are what make
+  it a sync tool you would trust with real files.
+
+
+--- MAKING IT REAL (the durability layer -- this is where toy becomes real) ---
+
+PHASE 11 - Durability & correctness (NOT optional; this IS the project)
+  atomic apply    -- received data -> temp file -> fsync -> atomic rename() over
+                     the target. A killed transfer must leave the OLD file or
+                     the NEW file, never a half-written corpse. THE load-bearing
+                     property; without it, sync corrupts data by construction.
+  manifest        -- persist prior state (path -> hash, size, mtime, inode)
+                     after each successful run. This is the design swap that
+                     turns a copier into a sync tool: diffing two LIVE snapshots
+                     cannot tell a DELETED file from a NOT-YET-CREATED one. Only
+                     remembered prior state can, so only a manifest lets you
+                     safely propagate deletions.
+  verify          -- re-hash the received file, compare to the sender's hash,
+                     THEN rename. A sync tool that doesn't verify what it wrote
+                     is a toy. (reuses jeksum.)
+  idempotent      -- running twice with no changes is a no-op; Ctrl-C then re-run
+                     is always safe. (falls out of manifest + atomic apply.)
+  mid-sync change -- re-stat size/mtime after reading; if the file moved under
+                     you, redo or skip-with-warning -- never ship a torn read.
+
+PHASE 12 - Block-delta transfer (the real rsync algorithm -- named, not implied)
+  rolling checksum + strong per-block hash so only CHANGED blocks of a file go
+  over the wire. Genuinely hard; this is what makes rsync rsync. Explicitly a
+  SEPARATE phase -- whole-file transfer (Phase 10) is already real and usable.
+
+
+--- SCOPE: what "legitimate" means here ---
+  Target: a one-directional encrypted mirror of YOUR OWN machines. Genuinely
+  reachable solo and honestly usable. Out of scope (and out of any claim):
+  merging other people's edits, or standing up to a hostile adversary.
+
 
 tools: 14 C tools + jeksync

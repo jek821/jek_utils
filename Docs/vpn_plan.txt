@@ -14,17 +14,30 @@ Two planes, like the real thing:
                 IS. Understanding it is the point of the project.
 
 
---- SHARED TRUNK (already in sync_plan.txt --- reuse, don't rebuild) ---
+--- SHARED TRUNK (lives in libjek --- link it, don't rebuild) ---
 
   jekvpn is a SECOND capstone hanging off the same ladder as jeksync. The
   control plane is a wire protocol over sockets served by a concurrent daemon
-  --- skills sync_plan.txt already builds. Reuse these rungs directly:
+  --- skills sync_plan.txt already builds. These rungs, once a second consumer
+  needs them, get extracted into libjek/ (see libjek/README.md) and BOTH
+  capstones link the same module -- the shared logic is written once, not
+  reimplemented per tool. Reuse directly:
 
-  jekencrypt (sync Phase 6) -- libsodium keygen, nonces, encrypt/decrypt.
-                               EXTEND: from symmetric file encryption to
-                               public-key per-packet boxing (X25519 +
-                               crypto_box) so each node encrypts to a peer's
-                               public key.
+  jekcrypto  (sync Phase 6) -- libsodium keygen, nonces, AEAD.
+                               DESIGN SWAP (this is the whole ballgame): do NOT
+                               encrypt each packet directly to a peer's static
+                               public key with crypto_box. That naive design has
+                               no forward secrecy, no replay protection, and
+                               reuses nonces on restart. Instead the data plane
+                               runs a NOISE session (Noise_IK -- what WireGuard
+                               uses): a handshake establishes EPHEMERAL session
+                               keys, then packets are AEAD-sealed under those
+                               keys with a counter nonce + sliding replay window.
+                               This one swap resolves forward secrecy, replay,
+                               rekeying, nonce uniqueness, session protocol, and
+                               peer identity at once. DO NOT ROLL YOUR OWN
+                               handshake -- adopting Noise is the single change
+                               that separates "real" from "leaks silently".
   jekproto   (sync Phase 8) -- length-prefixed, typed binary messages. The
                                control protocol IS jekproto: message types
                                REGISTER, ASSIGN_IP, PEER_MAP, PEER_UP/DOWN.
@@ -59,6 +72,11 @@ PHASE V2 - Datagram I/O + event loop
 PHASE V3 - The coordinator (the headscale analog)
   jekcoord -- a server that:
                 - accepts node registrations (jekproto REGISTER over jekrecv)
+                - PROVES KEY OWNERSHIP at registration: challenge the node with a
+                  nonce, node signs it, coordinator verifies against the pubkey
+                  it presents. Without this, anyone registers as anyone. The
+                  control channel itself is authenticated + encrypted (Noise or
+                  TLS), never plaintext.
                 - assigns each node a virtual IP from a pool (e.g. 10.99.0.0/24)
                 - records each node's public key + real endpoint (learned from
                   the source address of its packets --- poor-man's STUN, exactly
@@ -71,21 +89,48 @@ PHASE V4 - The node + composition
   jeknode -- the client daemon. Composes the whole ladder:
                 jektun      read/write the tunnel
               + jekmux      poll the tun fd and UDP socket; route by dest IP
-              + jekencrypt  box each packet to the destination peer's key
+              + jekcrypto   run a Noise session per peer; AEAD-seal each packet
               + jekproto /
                 jeksend     register with jekcoord, receive the PEER_MAP
               + jeksig      clean shutdown, tear down the tun device
 
-             Core loop:
-               tun  -> read IP packet -> look up dest virtual IP in peer map
-                    -> encrypt to that peer -> sendto its endpoint
-               sock -> recvfrom -> decrypt+verify -> write packet to tun
+             MODEL: cryptokey routing (WireGuard's core idea). A peer's public
+             key is authorized for a specific set of virtual IPs, and that
+             mapping IS simultaneously the routing table AND the access-control
+             list. This framing is what makes the source-IP check below natural.
 
-PHASE V5 - NAT traversal (stretch --- no analog anywhere in either plan)
-  jekhole -- UDP hole punching coordinated by jekcoord, with a relay fallback
-             (a DERP-style encrypted relay) for peers that can't connect
-             directly. The genuinely hard problem Tailscale exists to solve.
-             Optional; jekvpn is a complete, working mesh without it.
+             Core loop:
+               tun  -> read IP packet -> look up dest virtual IP -> find the
+                    peer authorized for it -> seal under that Noise session
+                    -> sendto its endpoint
+               sock -> recvfrom -> open with the session that decrypts it
+                    -> VALIDATE: inner IP packet's SOURCE must equal the virtual
+                       IP bound to that peer's key (else a valid peer is spoofing
+                       another node -- drop it) -> write packet to tun
+
+PHASE V5 - Connectivity: relay-first, then hole-punch (revised)
+  jekrelay -- build the RELAY FALLBACK FIRST: a DERP-style encrypted relay so
+              every peer PAIR has a working path from day one. "Works across the
+              internet" instead of "works on my LAN."
+  jekhole  -- THEN add UDP hole punching (coordinated by jekcoord) purely as a
+              latency optimization for pairs that can connect directly. You do
+              not need to solve the company-sized hole-punching problem to have
+              a real, usable VPN -- relay covers everyone; direct just improves
+              the ones it can.
+  keepalive + mobility -- persistent keepalive to hold NAT mappings open;
+              re-learn a peer's endpoint when its source address changes
+              (roaming / NAT rebind), on an AUTHENTICATED packet only.
+
+PHASE V6 - Hardening (NOT optional --- this is where toy becomes real)
+  never trust the wire -- reject malformed / oversized packets; handle
+                          reordering, duplication, loss (Noise replay window
+                          already covers duplicates/too-old).
+  rekey                 -- rotate session keys on time and on data volume.
+  anti-DoS              -- rate-limit handshakes; cap concurrent sessions;
+                          bound per-peer memory so a flood can't exhaust the box.
+  key storage           -- private keys stored securely, not world-readable.
+  MTU                   -- account for tunnel overhead so large packets don't
+                          silently fragment or vanish.
 
 
 --- TESTING ---
@@ -95,6 +140,15 @@ PHASE V5 - NAT traversal (stretch --- no analog anywhere in either plan)
 
 
 --- shared vs new ---
-  shared with sync_plan.txt : jekencrypt, jekproto, jeksend, jekrecv,
+  shared via libjek         : jekcrypto, jekproto, jeksend, jekrecv,
                               jekpar, jeksig
-  new for jekvpn            : jektun, jekmux, jekcoord, jeknode (+ jekhole)
+  new for jekvpn            : jektun, jekmux, jekcoord, jeknode
+                              (+ jekrelay, jekhole)
+
+
+--- SCOPE: what "legitimate" means here ---
+  Target: a secure mesh between YOUR OWN machines. Reachable solo and honestly
+  usable. Out of scope (and out of any claim): protecting other people's
+  traffic, or standing up to a serious adversary. The linchpin decision that
+  keeps "legitimate" achievable rather than dangerous: adopt Noise, never roll
+  your own crypto.

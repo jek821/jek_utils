@@ -23,7 +23,7 @@ Each tool is written with the following in mind:
 
 - **Use the Unix API directly.** No wrappers around `open`, `read`, `write`, `close` — the point is to work at the interface, not above it.
 - **Handle errors correctly.** Every syscall return value is checked. Partial writes are retried. Resources are cleaned up on failure paths.
-- **Keep it simple and self-contained.** No unnecessary dependencies or abstractions beyond what the problem requires.
+- **No premature abstraction.** Each tool starts self-contained. Shared logic is extracted into [`libjek`](libjek/) *only once a second tool actually needs it* — the abstraction is discovered from two real callers, never designed up front. Duplication is cheaper than the wrong abstraction.
 
 ## Naming conventions
 
@@ -44,6 +44,16 @@ So a tool named `foo` lives in `jek_foo/` and contains:
 
 The compiled binary is `jek_foo/jekfoo` (no extension). The root `.gitignore` relies on this convention — it ignores `jek_*/jek*` while keeping `*.c` / `*.h` / `*.sh`, so build artifacts are never committed and **no `.gitignore` edits are needed when you add a new tool.**
 
+## Shared library (`libjek`)
+
+The project is organized in three layers, not as a flat pile of tools:
+
+1. **[`libjek/`](libjek/)** — the shared core. Non-trivial logic that more than one consumer needs (file-tree traversal, buffered/atomic I/O, streaming hashes, the wire codec, the crypto session, the thread pool) lives here once, tested in isolation.
+2. **The tools** (`jek_find/`, `jek_sum/`, …) — thin CLIs over `libjek`. They stay as focused learning exercises *and* double as the tests that exercise each library module.
+3. **The capstones** (`jeksync`, `jekvpn`) — compose `libjek`, not the tools.
+
+Code reaches `libjek` by **organic extraction, not up-front design**: a thing is pulled into the library once a *second* tool actually needs it, so the API is shaped by two real callers instead of guessed at in advance. `libjek` is a destination, not a scheduled phase — see [`libjek/README.md`](libjek/README.md) for what belongs there and the module convention.
+
 ## Tools
 
 | Tool | Description |
@@ -62,6 +72,8 @@ The repo uses a two-level Makefile structure:
 - **Per-tool `Makefile`** — builds and installs that tool in isolation. Run from inside a tool's directory.
 
 Both support the same targets (`all`, `install`, `uninstall`, `clean`, `test`). The root one just delegates each target down to every tool's Makefile using `make -C <dir>`.
+
+Once shared logic is extracted, [`libjek/`](libjek/) builds to a static archive `libjek.a`; tools and capstones link it by adding the archive to their link line plus `-I../libjek` for the headers. That Makefile wiring lands with the first real extraction — until then there is nothing to build there.
 
 ### Install everything at once
 
